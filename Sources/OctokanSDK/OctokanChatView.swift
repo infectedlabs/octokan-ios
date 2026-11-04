@@ -87,10 +87,20 @@ public struct OctokanChatView: View {
         }
     }
 
-    private var composer: some View {
-        HStack(alignment: .bottom, spacing: 8) {
+    // multi-line growth needs iOS 16; iOS 15 gets a single-line field
+    @ViewBuilder
+    private var messageField: some View {
+        if #available(iOS 16.0, *) {
             TextField("Write a message…", text: $draft, axis: .vertical)
                 .lineLimit(1...5)
+        } else {
+            TextField("Write a message…", text: $draft)
+        }
+    }
+
+    private var composer: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            messageField
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20))
