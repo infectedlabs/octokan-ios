@@ -79,8 +79,13 @@ public final class OctokanChatModel: ObservableObject {
     // MARK: - internals
 
     /// Sends queued messages in order. A network failure leaves them queued for the next poll.
+    private var flushing = false
+
+    /// One sender at a time: a send and the poll loop must not post the same message twice at once.
     private func flush() async {
-        guard let client else { return }
+        guard let client, !flushing else { return }
+        flushing = true
+        defer { flushing = false }
         while let next = queue.first {
             do {
                 let sent = try await client.send(next.body, clientId: next.clientId)

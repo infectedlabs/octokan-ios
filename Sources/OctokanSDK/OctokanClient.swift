@@ -88,6 +88,8 @@ final class OctokanClient {
             throw OctokanError.network
         }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        // 5xx is the server having a bad moment, not a refusal: the caller keeps the message queued and retries
+        if status >= 500 { throw OctokanError.network }
         guard (200..<300).contains(status) else {
             let message = (try? JSONDecoder().decode(ErrorResponse.self, from: data))?.error
             throw OctokanError.server(message ?? "Something went wrong (\(status)).")
