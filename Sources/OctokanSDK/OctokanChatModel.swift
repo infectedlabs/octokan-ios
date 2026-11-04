@@ -7,6 +7,7 @@ public struct OctokanMessage: Identifiable, Equatable {
     public let fromVisitor: Bool
     public let body: String
     public var pending: Bool
+    public var at: Date = Date()
 }
 
 struct QueuedMessage: Codable, Equatable {
@@ -23,11 +24,14 @@ public final class OctokanChatModel: ObservableObject {
     @Published public private(set) var welcome = "Hey, something not working? Tell us."
     @Published public private(set) var ready = false
     @Published public private(set) var error: String?
+    @Published public private(set) var typing = false // the owner is typing a reply
+    @Published public private(set) var seenAt: Date? // when the owner last opened the conversation
 
     private var client: OctokanClient?
     private var polling: Task<Void, Never>?
     private var queue: [QueuedMessage] = []
     private var lastServerId = 0
+    private var typingSentAt = Date.distantPast
 
     public init() {}
 
@@ -48,6 +52,8 @@ public final class OctokanChatModel: ObservableObject {
             }
             apply(res.config)
             merge(res.messages ?? [])
+            typing = res.typing ?? false
+            seenAt = res.seenAt.flatMap(parseISO)
             for q in queue where !messages.contains(where: { $0.id == q.clientId }) {
                 messages.append(OctokanMessage(id: q.clientId, serverId: nil, fromVisitor: true, body: q.body, pending: true))
             }
@@ -64,6 +70,13 @@ public final class OctokanChatModel: ObservableObject {
     public func stop() {
         polling?.cancel()
         polling = nil
+    }
+
+    /// Call while the person types. Tells the owner "typing...", at most every three seconds.
+    public func notifyTyping() {
+        guard let client, client.token != nil, Date().timeIntervalSince(typingSentAt) >= 3 else { return }
+        typingSentAt = Date()
+        Task { try? await client.typing() }
     }
 
     public func send(_ raw: String) {
@@ -109,7 +122,7 @@ public final class OctokanChatModel: ObservableObject {
         polling?.cancel()
         polling = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
                 guard let self, !Task.isCancelled else { return }
                 await self.poll()
             }
@@ -121,13 +134,15 @@ public final class OctokanChatModel: ObservableObject {
         if !queue.isEmpty { await flush() }
         if let res = try? await client.messages(after: lastServerId) {
             merge(res.messages ?? [])
+            typing = res.typing ?? false
+            seenAt = res.seenAt.flatMap(parseISO) ?? seenAt
         }
     }
 
     private func merge(_ incoming: [WireMessage]) {
         for m in incoming {
             lastServerId = max(lastServerId, m.id)
-            let item = OctokanMessage(id: m.clientId ?? "s\(m.id)", serverId: m.id, fromVisitor: m.sender == "visitor", body: m.body, pending: false)
+            let item = OctokanMessage(id: m.clientId ?? "s\(m.id)", serverId: m.id, fromVisitor: m.sender == "visitor", body: m.body, pending: false, at: parseISO(m.at) ?? Date())
             if let i = messages.firstIndex(where: { $0.id == item.id || ($0.serverId != nil && $0.serverId == m.id) }) {
                 messages[i] = item
             } else {
@@ -161,4 +176,19 @@ extension Color {
         guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
         self.init(red: Double((v >> 16) & 255) / 255, green: Double((v >> 8) & 255) / 255, blue: Double(v & 255) / 255)
     }
+}
+
+/// The server sends ISO times like 2026-11-05T10:00:00.123456+00:00; this reads them with or without fractions.
+func parseISO(_ iso: String) -> Date? {
+    let withFraction = ISO8601DateFormatter()
+    withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let d = withFraction.date(from: iso) { return d }
+    let plain = ISO8601DateFormatter()
+    plain.formatOptions = [.withInternetDateTime]
+    if let d = plain.date(from: iso) { return d }
+    // fractions longer than milliseconds: drop them and read the rest
+    if let dot = iso.firstIndex(of: "."), let tz = iso[dot...].firstIndex(where: { $0 == "+" || $0 == "-" || $0 == "Z" }) {
+        return plain.date(from: String(iso[..<dot]) + String(iso[tz...]))
+    }
+    return nil
 }

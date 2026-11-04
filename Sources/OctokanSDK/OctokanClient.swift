@@ -19,11 +19,15 @@ struct InitResponse: Decodable {
     let token: String?
     let config: WireConfig?
     let messages: [WireMessage]?
+    let typing: Bool? // the owner is typing a reply
+    let seenAt: String? // when the owner last opened the conversation
 }
 
 struct MessagesResponse: Decodable {
     let messages: [WireMessage]?
     let status: String?
+    let typing: Bool?
+    let seenAt: String?
 }
 
 struct SendResponse: Decodable {
@@ -114,6 +118,12 @@ final class OctokanClient {
 
     func messages(after id: Int) async throws -> MessagesResponse {
         try await run(try request("messages", method: "GET", query: [URLQueryItem(name: "after", value: String(id))]), as: MessagesResponse.self)
+    }
+
+    /// Tells the owner the person is typing. Fire and forget.
+    func typing() async throws {
+        struct Done: Decodable { let ok: Bool? }
+        _ = try await run(try request("typing", method: "POST", body: [:]), as: Done.self)
     }
 
     func send(_ text: String, clientId: String) async throws -> WireMessage? {
