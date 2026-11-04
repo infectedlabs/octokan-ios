@@ -241,9 +241,7 @@ public struct OctokanChatView: View {
             HStack(alignment: .bottom, spacing: 8) {
                 if mine { Spacer(minLength: 48) }
                 if !mine { if ends { avatar(28, 12) } else { Color.clear.frame(width: 28, height: 28) } }
-                Text(m.body)
-                    .font(.system(size: 16))
-                    .foregroundColor(mine ? .white : ink)
+                content(m, mine: mine)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
                     .background(mine ? model.accent : soft, in: bubbleShape(mine: mine, ends: ends))
@@ -259,6 +257,48 @@ public struct OctokanChatView: View {
         }
         .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)
         .padding(.top, starts ? 12 : 3)
+    }
+
+    /// A message's content: its text, or a photo, a voice note or a file that opens when tapped.
+    @ViewBuilder
+    private func content(_ m: OctokanMessage, mine: Bool) -> some View {
+        let color: Color = mine ? .white : ink
+        if m.kind == "text" || (m.attachmentURL == nil && m.attachmentName == nil) {
+            Text(m.body).font(.system(size: 16)).foregroundColor(color)
+        } else {
+            let defaults = ["📷 Photo", "🎤 Voice message", "📎 \(m.attachmentName ?? "")"]
+            VStack(alignment: .leading, spacing: 6) {
+                if m.kind == "image", let url = m.attachmentURL {
+                    Link(destination: url) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image): image.resizable().scaledToFill()
+                            default: Color.black.opacity(0.08)
+                            }
+                        }
+                        .frame(width: 220, height: 160)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    }
+                } else {
+                    let card = HStack(spacing: 10) {
+                        Text(m.kind == "audio" ? "🎤" : "📎").font(.system(size: 20))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(m.kind == "audio" ? "Voice message" : (m.attachmentName ?? "File")).font(.system(size: 14, weight: .semibold)).foregroundColor(color).lineLimit(1)
+                            Text(m.kind == "audio" ? "Tap to play" : (m.attachmentSize.map { byteLabel($0) } ?? "Tap to open")).font(.system(size: 11)).foregroundColor(color.opacity(0.7))
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(mine ? Color.white.opacity(0.18) : Color.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+                    if let url = m.attachmentURL { Link(destination: url) { card } } else { card }
+                }
+                if !defaults.contains(m.body) { Text(m.body).font(.system(size: 16)).foregroundColor(color) }
+            }
+        }
+    }
+
+    private func byteLabel(_ n: Int) -> String {
+        n > 1_048_576 ? String(format: "%.1f MB", Double(n) / 1_048_576) : "\(max(1, n / 1024)) KB"
     }
 
     // multi-line growth needs iOS 16; iOS 15 gets a single-line field
@@ -328,9 +368,10 @@ private struct UnevenRoundedBubble: Shape {
     }
 }
 
-/// A ready-made button that opens the chat. Drop it anywhere in your UI.
+/// A ready-made button that opens the chat. A red badge shows how many replies from support are unread.
 public struct OctokanChatButton: View {
     @State private var open = false
+    @ObservedObject private var unread = OctokanUnread.shared
     private let label: String
 
     public init(_ label: String = "Chat with us") {
@@ -339,6 +380,19 @@ public struct OctokanChatButton: View {
 
     public var body: some View {
         Button(label) { open = true }
+            .overlay(alignment: .topTrailing) {
+                if unread.count > 0 {
+                    Text(unread.count > 9 ? "9+" : "\(unread.count)")
+                        .font(.system(size: 12, weight: .heavy))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .frame(minWidth: 22, minHeight: 22)
+                        .background(Color(red: 1, green: 0.23, blue: 0.14), in: Capsule())
+                        .overlay(Capsule().stroke(Color.white, lineWidth: 2))
+                        .offset(x: 10, y: -10)
+                }
+            }
+            .onAppear { Octokan.watchUnread() }
             .sheet(isPresented: $open) { OctokanChatView(onClose: { open = false }) }
     }
 }

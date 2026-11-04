@@ -8,6 +8,10 @@ public struct OctokanMessage: Identifiable, Equatable {
     public let body: String
     public var pending: Bool
     public var at: Date = Date()
+    public var kind: String = "text" // text, image, audio or file
+    public var attachmentName: String?
+    public var attachmentSize: Int?
+    public var attachmentURL: URL?
 }
 
 struct QueuedMessage: Codable, Equatable {
@@ -36,6 +40,7 @@ public final class OctokanChatModel: ObservableObject {
     public init() {}
 
     public func start() async {
+        Octokan.chatOpened()
         guard let appId = Octokan.appId, let baseURL = Octokan.baseURL else {
             error = OctokanError.notConfigured.errorDescription
             return
@@ -68,6 +73,7 @@ public final class OctokanChatModel: ObservableObject {
     }
 
     public func stop() {
+        Octokan.chatClosed()
         polling?.cancel()
         polling = nil
     }
@@ -142,13 +148,18 @@ public final class OctokanChatModel: ObservableObject {
     private func merge(_ incoming: [WireMessage]) {
         for m in incoming {
             lastServerId = max(lastServerId, m.id)
-            let item = OctokanMessage(id: m.clientId ?? "s\(m.id)", serverId: m.id, fromVisitor: m.sender == "visitor", body: m.body, pending: false, at: parseISO(m.at) ?? Date())
+            var item = OctokanMessage(id: m.clientId ?? "s\(m.id)", serverId: m.id, fromVisitor: m.sender == "visitor", body: m.body, pending: false, at: parseISO(m.at) ?? Date())
+            item.kind = m.kind ?? "text"
+            item.attachmentName = m.attachment?.name
+            item.attachmentSize = m.attachment?.size
+            item.attachmentURL = m.attachment?.url.flatMap(URL.init(string:))
             if let i = messages.firstIndex(where: { $0.id == item.id || ($0.serverId != nil && $0.serverId == m.id) }) {
                 messages[i] = item
             } else {
                 messages.append(item)
             }
         }
+        Octokan.markRead(lastServerId)
     }
 
     private func apply(_ config: WireConfig?) {

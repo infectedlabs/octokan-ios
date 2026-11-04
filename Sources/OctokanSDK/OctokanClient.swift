@@ -1,5 +1,13 @@
 import Foundation
 
+/// A photo, voice note or file attached to a message. `url` is a link that lasts about an hour.
+struct WireAttachment: Decodable {
+    let name: String?
+    let type: String?
+    let size: Int?
+    let url: String?
+}
+
 /// A message as the server returns it.
 struct WireMessage: Decodable {
     let id: Int
@@ -7,6 +15,8 @@ struct WireMessage: Decodable {
     let body: String
     let at: String
     let clientId: String?
+    let kind: String?
+    let attachment: WireAttachment?
 }
 
 struct WireConfig: Decodable {
@@ -116,8 +126,11 @@ final class OctokanClient {
         return try await run(try request("init", method: "POST", body: body), as: InitResponse.self)
     }
 
-    func messages(after id: Int) async throws -> MessagesResponse {
-        try await run(try request("messages", method: "GET", query: [URLQueryItem(name: "after", value: String(id))]), as: MessagesResponse.self)
+    /// `peek` is the unread badge checking in while the chat is closed: it never counts as the replies being seen.
+    func messages(after id: Int, peek: Bool = false) async throws -> MessagesResponse {
+        var query = [URLQueryItem(name: "after", value: String(id))]
+        if peek { query.append(URLQueryItem(name: "peek", value: "1")) }
+        return try await run(try request("messages", method: "GET", query: query), as: MessagesResponse.self)
     }
 
     /// Tells the owner the person is typing. Fire and forget.
