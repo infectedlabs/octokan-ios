@@ -35,7 +35,20 @@ private func clock(_ date: Date) -> String {
     return f.string(from: date)
 }
 
+/// The chat's text in the device language (English fills any gap).
+private let L = OctokanStrings.current()
+private func tr(_ key: String) -> String { L[key] ?? key }
+
 /// Messages in order, with day dividers, bubble grouping and the delivery status of the last message.
+private func statusLabel(_ status: String?) -> String? {
+    switch status {
+    case "seen": return "✓✓ " + tr("seen")
+    case "sent": return "✓ " + tr("sent")
+    case "sending": return tr("sending")
+    default: return nil
+    }
+}
+
 private func buildRows(_ messages: [OctokanMessage], seenAt: Date?, typing: Bool) -> [ChatRow] {
     var rows: [ChatRow] = []
     let gap: TimeInterval = 5 * 60
@@ -50,7 +63,7 @@ private func buildRows(_ messages: [OctokanMessage], seenAt: Date?, typing: Bool
         let ends = next == nil || next!.fromVisitor != m.fromVisitor || !cal.isDate(next!.at, inSameDayAs: m.at) || next!.at.timeIntervalSince(m.at) > gap
         var status: String?
         if i == lastMine {
-            if m.pending { status = "Sending…" } else if let seenAt, seenAt >= m.at { status = "✓✓ Seen" } else { status = "✓ Sent" }
+            if m.pending { status = "sending" } else if let seenAt, seenAt >= m.at { status = "seen" } else { status = "sent" }
         }
         rows.append(.message(m: m, starts: starts, ends: ends, status: status))
     }
@@ -140,13 +153,13 @@ public struct OctokanChatView: View {
                 Text(model.title).font(.system(size: 17, weight: .bold)).foregroundColor(ink)
                 if model.typing {
                     HStack(spacing: 6) {
-                        Text("typing").font(.system(size: 12, weight: .semibold)).foregroundColor(seenGreen)
+                        Text(tr("typing")).font(.system(size: 12, weight: .semibold)).foregroundColor(seenGreen)
                         BouncingDots(color: seenGreen)
                     }
                 } else {
                     HStack(spacing: 6) {
                         Circle().fill(Color.green).frame(width: 7, height: 7)
-                        Text("We usually reply within minutes").font(.system(size: 12)).foregroundColor(muted)
+                        Text(tr("hint")).font(.system(size: 12)).foregroundColor(muted)
                     }
                 }
             }
@@ -192,9 +205,9 @@ public struct OctokanChatView: View {
             if model.messages.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
-                        starter("🐞", "Report a problem", "Something isn't working: ")
-                        starter("💡", "Share an idea", "I have an idea: ")
-                        starter("❓", "Ask a question", "I have a question: ")
+                        starter("🐞", tr("report"), tr("p_report"))
+                        starter("💡", tr("idea"), tr("p_idea"))
+                        starter("❓", tr("question"), tr("p_question"))
                     }
                     .padding(.horizontal, 4)
                 }
@@ -262,9 +275,9 @@ public struct OctokanChatView: View {
                 if !mine { Spacer(minLength: 48) }
             }
             if ends || status != nil {
-                Text(clock(m.at) + (status.map { " · \($0)" } ?? ""))
-                    .font(.system(size: 10, weight: status == "✓✓ Seen" ? .bold : .regular))
-                    .foregroundColor(status == "✓✓ Seen" ? seenGreen : Color(.tertiaryLabel))
+                Text(clock(m.at) + (statusLabel(status).map { " · \($0)" } ?? ""))
+                    .font(.system(size: 10, weight: status == "seen" ? .bold : .regular))
+                    .foregroundColor(status == "seen" ? seenGreen : Color(.tertiaryLabel))
                     .padding(.leading, mine ? 0 : 36)
             }
         }
@@ -318,10 +331,10 @@ public struct OctokanChatView: View {
     @ViewBuilder
     private var messageField: some View {
         if #available(iOS 16.0, *) {
-            TextField("Write a message…", text: $draft, axis: .vertical)
+            TextField(tr("ph"), text: $draft, axis: .vertical)
                 .lineLimit(1...5)
         } else {
-            TextField("Write a message…", text: $draft)
+            TextField(tr("ph"), text: $draft)
         }
     }
 
