@@ -25,6 +25,7 @@ public final class OctokanChatModel: ObservableObject {
     @Published public private(set) var messages: [OctokanMessage] = []
     @Published public private(set) var title = "Support"
     @Published public private(set) var accent = Color.black
+    @Published public private(set) var logo: URL?
     @Published public private(set) var welcome = "Hey, something not working? Tell us."
     @Published public private(set) var ready = false
     @Published public private(set) var error: String?
@@ -166,6 +167,7 @@ public final class OctokanChatModel: ObservableObject {
         guard let config else { return }
         if let t = config.title, !t.isEmpty { title = t }
         if let w = config.welcome, !w.isEmpty { welcome = w }
+        if let l = config.logo, l.hasPrefix("https://"), let url = URL(string: l) { logo = url }
         if let hex = config.accent, let c = Color(octokanHex: hex) { accent = c }
     }
 

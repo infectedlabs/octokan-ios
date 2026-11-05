@@ -112,12 +112,25 @@ public struct OctokanChatView: View {
 
     private var initial: String { String((model.title.first ?? "S")).uppercased() }
 
+    /// The owner's chat image when there is one, otherwise the first letter of the title.
+    @ViewBuilder
     private func avatar(_ size: CGFloat, _ font: CGFloat) -> some View {
-        Text(initial)
-            .font(.system(size: font, weight: .heavy))
-            .foregroundColor(.white)
+        if let logo = model.logo {
+            AsyncImage(url: logo) { phase in
+                switch phase {
+                case .success(let image): image.resizable().scaledToFill()
+                default: model.accent
+                }
+            }
             .frame(width: size, height: size)
-            .background(model.accent, in: Circle())
+            .clipShape(Circle())
+        } else {
+            Text(initial)
+                .font(.system(size: font, weight: .heavy))
+                .foregroundColor(.white)
+                .frame(width: size, height: size)
+                .background(model.accent, in: Circle())
+        }
     }
 
     private var header: some View {

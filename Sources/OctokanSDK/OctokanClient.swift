@@ -23,6 +23,7 @@ struct WireConfig: Decodable {
     let title: String?
     let accent: String?
     let welcome: String?
+    let logo: String? // the owner's chat image (https), if they set one
 }
 
 struct InitResponse: Decodable {
